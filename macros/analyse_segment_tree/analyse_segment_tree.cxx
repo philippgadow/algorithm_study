@@ -244,13 +244,22 @@ void analyse_segment_tree(std::string output_filename, std::string input_filenam
 		}
 
 		// 2.) determine rpc resolution in barrel outer
+		// in barrel outer the linear extrapolation of the segments from the 
+		// middle to the outer station seems not to be sufficient.
+		// insetead a parabolic fit is used and the tangent in the outer layer 
+		// is constructed to obtain the correct segment slope.
 		if(abs(eta) < 1.05){
-			if(tr->nb_middle_segments == 1 &&
+			if(tr->nb_inner_segments == 1 &&
+			   tr->nb_middle_segments == 1 &&
 			   tr->nb_outer_segments == 1){
 									
 				TVector3 dir_sector = dir[is_small_sector][phi_sector];
 
                                     
+                TVector3 pos_global_inner(tr->seg_pos_inner_x->at(0),
+                                    	  tr->seg_pos_inner_y->at(0),
+                                    	  tr->seg_pos_inner_z->at(0));
+
                 TVector3 pos_global_middle(tr->seg_pos_middle_x->at(0),
                                     	   tr->seg_pos_middle_y->at(0),
                                     	   tr->seg_pos_middle_z->at(0));
@@ -268,16 +277,33 @@ void analyse_segment_tree(std::string output_filename, std::string input_filenam
                 slope_outer = (dir_global_outer*dir_sector)/\
                 					 (dir_global_outer.Z());
                     
+                double ri = pos_global_inner*dir_sector;
                 double rm = pos_global_middle*dir_sector;
                 double ro = pos_global_outer*dir_sector;
                         
 				// smear position measurement of MDT
+				double z_inner = r->Gaus(pos_global_inner.Z(),\
+                	rpc_position_single_resolution);
                 double z_middle = r->Gaus(pos_global_middle.Z(),\
                 	rpc_position_double_resolution);
                 double z_outer = r->Gaus(pos_global_outer.Z(),\
                 	rpc_position_single_resolution);
+                
+                // calculate parabola through points
+                // r=a*(z-z0)^2 + r0
+                // r' = 2*a*(z - z_0)
+                double c = (ro - rm)/(rm - ri);
+                double z0 = (-z_outer * z_outer + z_middle * z_middle + \
+                	         c * (z_middle*z_middle - z_inner * z_inner)) / \
+                			 (2.0 * (-z_outer + z_middle +\
+                			  c * z_middle - c * z_inner));
+                double a = (ro - rm)/((z_outer - z0) * (z_outer - z0) - \
+                	                  (z_middle - z0) * (z_middle - z0));
+                // double r0 = ro - a * (z_outer - z_0) * (z_outer - z_0);
+
                 // calculate slope
-                slope_outer_calc = (ro - rm)/(z_outer - z_middle);
+                // slope_outer_calc = (ro - rm)/(z_outer - z_middle);
+                slope_outer_calc = 2 * a * (z_outer - z0);
                 if (tr->nb_hits_middle->at(0) > nb_hits_threshold &&
 					tr->nb_hits_outer->at(0) > nb_hits_threshold && pt > 10){
 					if (is_small_sector){
